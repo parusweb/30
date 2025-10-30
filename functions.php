@@ -1,4 +1,3 @@
-
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
@@ -1013,7 +1012,7 @@ let partCalcHTML = '<br><h4>Калькулятор стоимости реечн
 partCalcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:15px;">';
 
 // Выбор ширины (30-150 мм, шаг 10)
-partCalcHTML += `<label>Ширина рейки (мм): 
+partCalcHTML += `<label>Ширина (мм) : 
     <select id="part_width" style="background:#fff;margin-left:10px;">
         <option value="">Выберите...</option>`;
 for (let w = 30; w <= 150; w += 10) {
@@ -1023,13 +1022,13 @@ partCalcHTML += `</select></label>`;
 
 // Фиксированная длина (только для отображения)
 partCalcHTML += `<div style="display:flex;flex-direction:column;">
-    <span style="font-size:0.9em;color:#666;">Длина рейки (фиксированная):</span>
+    <span style="font-size:0.9em;color:#666;">Длина: </span>
     <strong style="font-size:1.1em;">3 метра</strong>
 </div>`;
 
 // Фиксированная толщина (только для отображения)  
 partCalcHTML += `<div style="display:flex;flex-direction:column;">
-    <span style="font-size:0.9em;color:#666;">Толщина (фиксированная):</span>
+    <span style="font-size:0.9em;color:#666;">Толщина: </span>
     <strong style="font-size:1.1em;">40 мм</strong>
 </div>`;
 
@@ -2263,8 +2262,8 @@ psCalcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items: cen
 
 // Фиксированные параметры
 psCalcHTML += '<div style="background:#f0f8ff; padding:10px; border-radius:5px; margin-bottom:10px; flex:0 0 100%;">';
-psCalcHTML += '<div><strong>Длина:</strong> 3 м (фиксировано)</div>';
-psCalcHTML += '<div><strong>Толщина:</strong> 40 мм (фиксировано)</div>';
+psCalcHTML += '<div><strong>Длина:</strong> 3м</div>';
+psCalcHTML += '<div><strong>Толщина:</strong> 40мм</div>';
 psCalcHTML += '</div>';
 
 // Поле ширины
@@ -2418,7 +2417,7 @@ if (calcSettings && calcSettings.length_min > 0 && calcSettings.length_max > 0) 
     
     sqCalcHTML += `</select></label>`;
 } else {
-    sqCalcHTML += `<label>Длина (м): 
+    sqcalcHTML += `<label>Длина (м): 
         <input type="number" id="mult_length" min="0.01" step="0.01" placeholder="0.01" style="width:100px; margin-left:10px;background:#fff">
     </label>`;
 }
@@ -6380,354 +6379,7 @@ add_action('wp_footer', function() {
     
     
     
-    // === ВЕРСИЯ v5.0 - ОТЛОЖЕННЫЙ ПАТЧИНГ + MUTATION OBSERVER ===
 
-// Глобальная функция для обновления отображаемой цены товара
-window.updateDisplayedProductPrice = function(newPrice, isCalculated = false) {
-    console.log('🔄 Updating displayed price to:', newPrice);
-    
-    // Ищем элемент цены
-    let priceEl = document.querySelector('p.price .woocommerce-Price-amount.amount');
-    
-    if (!priceEl) {
-        priceEl = document.querySelector('.woocommerce-Price-amount.amount');
-    }
-    if (!priceEl) {
-        priceEl = document.querySelector('p.price span.amount');
-    }
-    if (!priceEl) {
-        priceEl = document.querySelector('.price .amount');
-    }
-    
-    if (!priceEl) {
-        console.warn('⚠️ Price element not found');
-        return false;
-    }
-    
-    // Форматируем цену
-    const formattedPrice = Math.round(newPrice);
-    
-    // Обновляем HTML
-    priceEl.innerHTML = `<bdi>${formattedPrice}&nbsp;<span class="woocommerce-Price-currencySymbol">₽</span></bdi>`;
-    
-    // Визуальное выделение
-    const priceContainer = priceEl.closest('p.price');
-    if (priceContainer) {
-        if (isCalculated) {
-            priceContainer.style.color = '#2c5282';
-            priceContainer.style.fontWeight = 'bold';
-        } else {
-            priceContainer.style.color = '';
-            priceContainer.style.fontWeight = '';
-        }
-    }
-    
-    console.log('✅ Price updated to:', formattedPrice, '₽');
-    return true;
-};
-
-// Функция извлечения цены за штуку
-function extractPricePerItem(resultElement) {
-    if (!resultElement) return null;
-    
-    const html = resultElement.innerHTML;
-    console.log('📝 Searching in HTML (length=' + html.length + ')');
-    
-    const patterns = [
-        /Цена за 1 шт:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
-        /Цена за 1 шт:\s*<strong>([\d,\s.]+)\s*₽<\/strong>/i,
-        /за 1 шт[:\s]*<b>([\d,\s.]+)\s*₽<\/b>/i,
-        /за шт[:\s]*<b>([\d,\s.]+)\s*₽<\/b>/i
-    ];
-    
-    for (let i = 0; i < patterns.length; i++) {
-        const match = html.match(patterns[i]);
-        if (match) {
-            const price = parseFloat(match[1].replace(/[\s,]/g, ''));
-            console.log(`✅ Found price with pattern ${i + 1}:`, price);
-            return price;
-        }
-    }
-    
-    console.log('❌ Price not found in HTML');
-    console.log('HTML preview:', html.substring(0, 200));
-    return null;
-}
-
-// === ПАТЧИНГ С ПРОВЕРКОЙ СУЩЕСТВОВАНИЯ ===
-
-let patchAttempts = 0;
-const maxPatchAttempts = 20;
-
-function tryPatchCalculators() {
-    patchAttempts++;
-    console.log(`🔄 Patch attempt ${patchAttempts}/${maxPatchAttempts}`);
-    
-    let patchedCount = 0;
-    
-    // 1. КАЛЬКУЛЯТОР С МНОЖИТЕЛЕМ
-    if (typeof updateMultiplierCalc === 'function' && !updateMultiplierCalc._patched) {
-        console.log('🔧 Patching updateMultiplierCalc...');
-        
-        const original = updateMultiplierCalc;
-        
-        window.updateMultiplierCalc = function() {
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('📊 updateMultiplierCalc CALLED');
-            
-            original();
-            
-            setTimeout(() => {
-                const multResult = document.getElementById('calc_mult_result');
-                console.log('🔍 calc_mult_result:', multResult ? 'FOUND' : 'NOT FOUND');
-                
-                if (multResult) {
-                    const price = extractPricePerItem(multResult);
-                    if (price && price > 0) {
-                        console.log('💰 Price per item:', price);
-                        window.updateDisplayedProductPrice(price, true);
-                    }
-                }
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            }, 50);
-        };
-        
-        window.updateMultiplierCalc._patched = true;
-        console.log('✅ updateMultiplierCalc PATCHED');
-        patchedCount++;
-    }
-    
-    // 2. ПОГОННЫЕ МЕТРЫ
-    if (typeof updateRunningMeterCalc === 'function' && !updateRunningMeterCalc._patched) {
-        console.log('🔧 Patching updateRunningMeterCalc...');
-        
-        const original = updateRunningMeterCalc;
-        
-        window.updateRunningMeterCalc = function() {
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('📊 updateRunningMeterCalc CALLED');
-            
-            original();
-            
-            setTimeout(() => {
-                const rmResult = document.getElementById('calc_rm_result');
-                if (rmResult) {
-                    const price = extractPricePerItem(rmResult);
-                    if (price && price > 0) {
-                        window.updateDisplayedProductPrice(price, true);
-                    }
-                }
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            }, 50);
-        };
-        
-        window.updateRunningMeterCalc._patched = true;
-        console.log('✅ updateRunningMeterCalc PATCHED');
-        patchedCount++;
-    }
-    
-    // 3. КВАДРАТНЫЕ МЕТРЫ
-    if (typeof updateSquareMeterCalc === 'function' && !updateSquareMeterCalc._patched) {
-        console.log('🔧 Patching updateSquareMeterCalc...');
-        
-        const original = updateSquareMeterCalc;
-        
-        window.updateSquareMeterCalc = function() {
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('📊 updateSquareMeterCalc CALLED');
-            
-            original();
-            
-            setTimeout(() => {
-                const sqResult = document.getElementById('calc_sq_result');
-                if (sqResult) {
-                    const price = extractPricePerItem(sqResult);
-                    if (price && price > 0) {
-                        window.updateDisplayedProductPrice(price, true);
-                    }
-                }
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            }, 50);
-        };
-        
-        window.updateSquareMeterCalc._patched = true;
-        console.log('✅ updateSquareMeterCalc PATCHED');
-        patchedCount++;
-    }
-    
-    // 4. КАЛЬКУЛЯТОР ПЛОЩАДИ
-    if (typeof updateAreaCalc === 'function' && !updateAreaCalc._patched) {
-        const original = updateAreaCalc;
-        window.updateAreaCalc = function() {
-            original();
-            setTimeout(() => {
-                const form = document.querySelector('form.cart');
-                if (form) {
-                    const field = form.querySelector('input[name="custom_area_grand_total"]');
-                    if (field && field.value) {
-                        const total = parseFloat(field.value);
-                        if (total > 0) window.updateDisplayedProductPrice(total, true);
-                    }
-                }
-            }, 50);
-        };
-        window.updateAreaCalc._patched = true;
-        patchedCount++;
-    }
-    
-    // 5. СТАРЫЙ КАЛЬКУЛЯТОР РАЗМЕРОВ
-    if (typeof updateDimCalc === 'function' && !updateDimCalc._patched) {
-        const original = updateDimCalc;
-        window.updateDimCalc = function(auto = false) {
-            original(auto);
-            setTimeout(() => {
-                const form = document.querySelector('form.cart');
-                if (form) {
-                    const field = form.querySelector('input[name="custom_dim_grand_total"]');
-                    if (field && field.value) {
-                        const total = parseFloat(field.value);
-                        if (total > 0) window.updateDisplayedProductPrice(total, true);
-                    }
-                }
-            }, 50);
-        };
-        window.updateDimCalc._patched = true;
-        patchedCount++;
-    }
-    
-    // 6. РЕЕЧНЫЕ ПЕРЕГОРОДКИ
-    if (typeof updatePartitionSlatCalc === 'function' && !updatePartitionSlatCalc._patched) {
-        const original = updatePartitionSlatCalc;
-        window.updatePartitionSlatCalc = function() {
-            original();
-            setTimeout(() => {
-                const partResult = document.getElementById('calc_part_result');
-                if (partResult) {
-                    const price = extractPricePerItem(partResult);
-                    if (price && price > 0) {
-                        window.updateDisplayedProductPrice(price, true);
-                    }
-                }
-            }, 50);
-        };
-        window.updatePartitionSlatCalc._patched = true;
-        patchedCount++;
-    }
-    
-    console.log(`✅ Patched ${patchedCount} functions in attempt ${patchAttempts}`);
-    
-    // Если нашли хоть одну функцию или достигли максимума попыток - прекращаем
-    if (patchedCount > 0 || patchAttempts >= maxPatchAttempts) {
-        console.log('🎉 Patching complete!');
-        return true;
-    }
-    
-    return false;
-}
-
-// Пытаемся патчить с интервалом
-function startPatchingInterval() {
-    console.log('⏱️ Starting patching interval...');
-    
-    const interval = setInterval(() => {
-        const done = tryPatchCalculators();
-        if (done) {
-            clearInterval(interval);
-            console.log('🛑 Patching interval stopped');
-        }
-    }, 200);
-    
-    // Таймаут на всякий случай
-    setTimeout(() => {
-        clearInterval(interval);
-        console.log('⏰ Patching timeout reached');
-    }, 5000);
-}
-
-// === СБРОС ЦЕНЫ ===
-
-function getOriginalPriceFromPage() {
-    const priceEl = document.querySelector('p.price .woocommerce-Price-amount.amount');
-    if (!priceEl) return null;
-    
-    const priceText = priceEl.textContent || priceEl.innerText;
-    const priceMatch = priceText.match(/(\d+(?:[,\s]\d+)?)/);
-    
-    if (priceMatch) {
-        return parseFloat(priceMatch[1].replace(/[\s,]/g, ''));
-    }
-    
-    return null;
-}
-
-let originalBasePrice = null;
-
-function resetToBasePrice() {
-    if (originalBasePrice && originalBasePrice > 0) {
-        window.updateDisplayedProductPrice(originalBasePrice, false);
-    } else {
-        const price = getOriginalPriceFromPage();
-        if (price) {
-            window.updateDisplayedProductPrice(price, false);
-        }
-    }
-}
-
-// Отслеживаем очистку полей
-document.addEventListener('change', function(e) {
-    const calcInputIds = [
-        'mult_width', 'mult_length',
-        'rm_width', 'rm_length',
-        'sq_width', 'sq_length',
-        'calc_area_input',
-        'custom_width', 'custom_length',
-        'part_width'
-    ];
-    
-    if (calcInputIds.includes(e.target.id)) {
-        if (!e.target.value) {
-            const allEmpty = calcInputIds.every(id => {
-                const el = document.getElementById(id);
-                return !el || !el.value;
-            });
-            if (allEmpty) resetToBasePrice();
-        }
-    }
-});
-
-// === ИНИЦИАЛИЗАЦИЯ ===
-
-console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('📄 PRICE UPDATER v5.0 LOADING...');
-console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-// Сохраняем базовую цену сразу
-setTimeout(() => {
-    originalBasePrice = getOriginalPriceFromPage();
-    console.log('💾 Original price saved:', originalBasePrice);
-}, 100);
-
-// Пробуем патчить сразу
-setTimeout(() => {
-    console.log('🔍 Initial patch attempt...');
-    const done = tryPatchCalculators();
-    
-    if (!done) {
-        console.log('⚠️ Functions not ready, starting interval...');
-        startPatchingInterval();
-    }
-}, 500);
-
-// Дополнительная попытка через 2 секунды
-setTimeout(() => {
-    if (typeof updateMultiplierCalc === 'function' && !updateMultiplierCalc._patched) {
-        console.log('🔄 Late patching attempt...');
-        tryPatchCalculators();
-    }
-}, 2000);
-
-console.log('✅ Price updater v5.0 initialized');
-    
     
     </script>
     <?php
@@ -6810,3 +6462,493 @@ add_action('woocommerce_process_product_meta', function($post_id) {
 
 
 
+
+
+
+//==============================================================================
+// АВТООБНОВЛЕНИЕ ЦЕНЫ ТОВАРА ПРИ ИЗМЕНЕНИИ КАЛЬКУЛЯТОРА
+//==============================================================================
+
+add_action('wp_footer', function() {
+    if (!is_product()) return;
+    
+    global $product;
+    $product_id = $product->get_id();
+    
+    ?>
+    <script>
+(function() {
+    'use strict';
+
+    // ============================================================================
+    // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+    // ============================================================================
+    
+    let originalBasePrice = null;
+    const MAX_PATCH_ATTEMPTS = 20;
+    let patchAttempts = 0;
+
+    // ============================================================================
+    // ОСНОВНЫЕ ФУНКЦИИ
+    // ============================================================================
+
+    /**
+     * Обновляет отображаемую цену товара на странице
+     */
+    window.updateDisplayedProductPrice = function(newPrice, isCalculated = false) {
+        let priceEl = document.querySelector('p.price .woocommerce-Price-amount.amount');
+        
+        if (!priceEl) priceEl = document.querySelector('.woocommerce-Price-amount.amount');
+        if (!priceEl) priceEl = document.querySelector('p.price span.amount');
+        if (!priceEl) priceEl = document.querySelector('.price .amount');
+        
+        if (!priceEl) return false;
+        
+        const formattedPrice = Math.round(newPrice);
+        priceEl.innerHTML = `<bdi>${formattedPrice}&nbsp;<span class="woocommerce-Price-currencySymbol">₽</span></bdi>`;
+        
+        const priceContainer = priceEl.closest('p.price');
+        if (priceContainer) {
+            if (isCalculated) {
+                priceContainer.style.color = '#2c5282';
+                priceContainer.style.fontWeight = 'bold';
+            } else {
+                priceContainer.style.color = '';
+                priceContainer.style.fontWeight = '';
+            }
+        }
+        
+        return true;
+    };
+
+    /**
+     * Извлекает цену за единицу из HTML результата калькулятора
+     */
+    function extractPricePerItem(resultElement) {
+        if (!resultElement) return null;
+        
+        const html = resultElement.innerHTML;
+        
+        const patterns = [
+            /Цена за 1 шт:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
+            /Цена за 1 шт:\s*<strong>([\d,\s.]+)\s*₽<\/strong>/i,
+            /за 1 шт[:\s]*<b>([\d,\s.]+)\s*₽<\/b>/i,
+            /за шт[:\s]*<b>([\d,\s.]+)\s*₽<\/b>/i,
+            /Итого:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
+            /Итого с покраской:\s*<b>([\d,\s.]+)\s*₽<\/b>/i
+        ];
+        
+        for (let i = 0; i < patterns.length; i++) {
+            const match = html.match(patterns[i]);
+            if (match) {
+                const price = parseFloat(match[1].replace(/[\s,]/g, ''));
+                return price;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Получает оригинальную цену товара со страницы
+     */
+    function getOriginalPriceFromPage() {
+        const priceEl = document.querySelector('p.price .woocommerce-Price-amount.amount');
+        if (!priceEl) return null;
+        
+        const priceText = priceEl.textContent || priceEl.innerText;
+        const priceMatch = priceText.match(/(\d+(?:[,\s]\d+)?)/);
+        
+        if (priceMatch) {
+            return parseFloat(priceMatch[1].replace(/[\s,]/g, ''));
+        }
+        
+        return null;
+    }
+
+    /**
+     * Сбрасывает цену к базовой
+     */
+    function resetToBasePrice() {
+        if (originalBasePrice && originalBasePrice > 0) {
+            window.updateDisplayedProductPrice(originalBasePrice, false);
+        } else {
+            const price = getOriginalPriceFromPage();
+            if (price) {
+                window.updateDisplayedProductPrice(price, false);
+            }
+        }
+    }
+
+    // ============================================================================
+    // ПАТЧИНГ КАЛЬКУЛЯТОРОВ
+    // ============================================================================
+
+    /**
+     * Патчит функцию калькулятора с множителем
+     */
+    function patchMultiplierCalc() {
+        if (typeof updateMultiplierCalc !== 'function' || updateMultiplierCalc._patched) {
+            return false;
+        }
+
+        const original = updateMultiplierCalc;
+        
+        window.updateMultiplierCalc = function() {
+            original.apply(this, arguments);
+            
+            setTimeout(() => {
+                const multResult = document.getElementById('calc_mult_result');
+                if (multResult) {
+                    const price = extractPricePerItem(multResult);
+                    if (price && price > 0) {
+                        window.updateDisplayedProductPrice(price, true);
+                    }
+                }
+            }, 50);
+        };
+        
+        window.updateMultiplierCalc._patched = true;
+        return true;
+    }
+
+    /**
+     * Патчит функцию калькулятора погонных метров
+     */
+    function patchRunningMeterCalc() {
+        if (typeof updateRunningMeterCalc !== 'function' || updateRunningMeterCalc._patched) {
+            return false;
+        }
+
+        const original = updateRunningMeterCalc;
+        
+        window.updateRunningMeterCalc = function() {
+            original.apply(this, arguments);
+            
+            setTimeout(() => {
+                const rmResult = document.getElementById('calc_rm_result');
+                if (rmResult) {
+                    const price = extractPricePerItem(rmResult);
+                    if (price && price > 0) {
+                        window.updateDisplayedProductPrice(price, true);
+                    }
+                }
+            }, 50);
+        };
+        
+        window.updateRunningMeterCalc._patched = true;
+        return true;
+    }
+
+    /**
+     * Патчит функцию калькулятора квадратных метров
+     */
+    function patchSquareMeterCalc() {
+        if (typeof updateSquareMeterCalc !== 'function' || updateSquareMeterCalc._patched) {
+            return false;
+        }
+
+        const original = updateSquareMeterCalc;
+        
+        window.updateSquareMeterCalc = function() {
+            original.apply(this, arguments);
+            
+            setTimeout(() => {
+                const sqResult = document.getElementById('calc_sq_result');
+                if (sqResult) {
+                    const price = extractPricePerItem(sqResult);
+                    if (price && price > 0) {
+                        window.updateDisplayedProductPrice(price, true);
+                    }
+                }
+            }, 50);
+        };
+        
+        window.updateSquareMeterCalc._patched = true;
+        return true;
+    }
+
+    /**
+     * Патчит функцию калькулятора площади
+     */
+    function patchAreaCalc() {
+        if (typeof updateAreaCalc !== 'function' || updateAreaCalc._patched) {
+            return false;
+        }
+
+        const original = updateAreaCalc;
+        
+        window.updateAreaCalc = function() {
+            original.apply(this, arguments);
+            
+            setTimeout(() => {
+                const form = document.querySelector('form.cart');
+                if (form) {
+                    const field = form.querySelector('input[name="custom_area_grand_total"]');
+                    if (field && field.value) {
+                        const total = parseFloat(field.value);
+                        if (total > 0) {
+                            window.updateDisplayedProductPrice(total, true);
+                        }
+                    }
+                }
+            }, 50);
+        };
+        
+        window.updateAreaCalc._patched = true;
+        return true;
+    }
+
+    /**
+     * Патчит функцию старого калькулятора размеров
+     */
+    function patchDimCalc() {
+        if (typeof updateDimCalc !== 'function' || updateDimCalc._patched) {
+            return false;
+        }
+
+        const original = updateDimCalc;
+        
+        window.updateDimCalc = function(auto = false) {
+            original.call(this, auto);
+            
+            setTimeout(() => {
+                const form = document.querySelector('form.cart');
+                if (form) {
+                    const field = form.querySelector('input[name="custom_dim_grand_total"]');
+                    if (field && field.value) {
+                        const total = parseFloat(field.value);
+                        if (total > 0) {
+                            window.updateDisplayedProductPrice(total, true);
+                        }
+                    }
+                }
+            }, 50);
+        };
+        
+        window.updateDimCalc._patched = true;
+        return true;
+    }
+
+    /**
+     * Патчит функцию калькулятора реечных перегородок
+     */
+    function patchPartitionSlatCalc() {
+        if (typeof updatePartitionSlatCalc !== 'function' || updatePartitionSlatCalc._patched) {
+            return false;
+        }
+
+        const original = updatePartitionSlatCalc;
+        
+        window.updatePartitionSlatCalc = function() {
+            original.apply(this, arguments);
+            
+            setTimeout(() => {
+                const partResult = document.getElementById('calc_part_result');
+                if (partResult) {
+                    const price = extractPricePerItem(partResult);
+                    if (price && price > 0) {
+                        window.updateDisplayedProductPrice(price, true);
+                    }
+                }
+            }, 50);
+        };
+        
+        window.updatePartitionSlatCalc._patched = true;
+        return true;
+    }
+
+    /**
+     * Пытается пропатчить все калькуляторы
+     */
+    function tryPatchAllCalculators() {
+        patchAttempts++;
+        
+        let patchedCount = 0;
+        
+        if (patchMultiplierCalc()) patchedCount++;
+        if (patchRunningMeterCalc()) patchedCount++;
+        if (patchSquareMeterCalc()) patchedCount++;
+        if (patchAreaCalc()) patchedCount++;
+        if (patchDimCalc()) patchedCount++;
+        if (patchPartitionSlatCalc()) patchedCount++;
+        
+        return patchedCount > 0 || patchAttempts >= MAX_PATCH_ATTEMPTS;
+    }
+
+    /**
+     * Запускает процесс патчинга с интервалом
+     */
+    function startPatchingInterval() {
+        const interval = setInterval(() => {
+            const done = tryPatchAllCalculators();
+            if (done) {
+                clearInterval(interval);
+            }
+        }, 200);
+        
+        setTimeout(() => {
+            clearInterval(interval);
+        }, 5000);
+    }
+
+    // ============================================================================
+    // ОТСЛЕЖИВАНИЕ ИЗМЕНЕНИЙ В ПОЛЯХ КАЛЬКУЛЯТОРОВ
+    // ============================================================================
+
+    /**
+     * Устанавливает слушатели на поля калькуляторов
+     */
+    function setupCalculatorFieldListeners() {
+        // Список всех полей калькуляторов
+        const calculatorFields = {
+            // Калькулятор с множителем
+            'mult_width': 'updateMultiplierCalc',
+            'mult_length': 'updateMultiplierCalc',
+            
+            // Погонные метры
+            'rm_width': 'updateRunningMeterCalc',
+            'rm_length': 'updateRunningMeterCalc',
+            'rm_height': 'updateRunningMeterCalc',
+            'rm_height1': 'updateRunningMeterCalc',
+            'rm_height2': 'updateRunningMeterCalc',
+            
+            // Квадратные метры
+            'sq_width': 'updateSquareMeterCalc',
+            'sq_length': 'updateSquareMeterCalc',
+            
+            // Калькулятор площади
+            'calc_area_input': 'updateAreaCalc',
+            
+            // Старый калькулятор размеров
+            'custom_width': 'updateDimCalc',
+            'custom_length': 'updateDimCalc',
+            
+            // Реечные перегородки
+            'part_width': 'updatePartitionSlatCalc',
+            'ps_width': 'updatePartitionSlatCalc'
+        };
+
+        // Универсальный обработчик для всех полей
+        function handleFieldChange(fieldId, calcFunction) {
+            const field = document.getElementById(fieldId);
+            if (!field) return false;
+
+            const events = ['change', 'input', 'blur'];
+            events.forEach(eventType => {
+                field.addEventListener(eventType, function() {
+                    if (typeof window[calcFunction] === 'function') {
+                        // Небольшая задержка для корректного обновления
+                        setTimeout(() => {
+                            window[calcFunction]();
+                        }, 10);
+                    }
+                });
+            });
+
+            return true;
+        }
+
+        // Устанавливаем слушатели с повторными попытками
+        function attachListeners(attempt = 0) {
+            if (attempt > 10) return;
+
+            let attachedCount = 0;
+            
+            Object.entries(calculatorFields).forEach(([fieldId, calcFunction]) => {
+                if (handleFieldChange(fieldId, calcFunction)) {
+                    attachedCount++;
+                }
+            });
+
+            // Если не все поля найдены, пробуем снова
+            if (attachedCount < Object.keys(calculatorFields).length) {
+                setTimeout(() => attachListeners(attempt + 1), 300);
+            }
+        }
+
+        attachListeners();
+
+        // Также устанавливаем делегированный слушатель для динамически создаваемых полей
+        document.addEventListener('change', function(e) {
+            if (!e.target.id) return;
+            
+            const calcFunction = calculatorFields[e.target.id];
+            if (calcFunction && typeof window[calcFunction] === 'function') {
+                setTimeout(() => {
+                    window[calcFunction]();
+                }, 10);
+            }
+        });
+    }
+
+    /**
+     * Отслеживает очистку полей калькуляторов
+     */
+    function setupFieldWatchers() {
+        const calcInputIds = [
+            'mult_width', 'mult_length',
+            'rm_width', 'rm_length',
+            'sq_width', 'sq_length',
+            'calc_area_input',
+            'custom_width', 'custom_length',
+            'part_width', 'ps_width'
+        ];
+        
+        document.addEventListener('change', function(e) {
+            if (calcInputIds.includes(e.target.id)) {
+                if (!e.target.value) {
+                    const allEmpty = calcInputIds.every(id => {
+                        const el = document.getElementById(id);
+                        return !el || !el.value;
+                    });
+                    if (allEmpty) {
+                        resetToBasePrice();
+                    }
+                }
+            }
+        });
+    }
+
+    // ============================================================================
+    // ИНИЦИАЛИЗАЦИЯ
+    // ============================================================================
+
+    function init() {
+        // Сохраняем оригинальную цену
+        setTimeout(() => {
+            originalBasePrice = getOriginalPriceFromPage();
+        }, 100);
+
+        // Патчим калькуляторы
+        setTimeout(() => {
+            const done = tryPatchAllCalculators();
+            if (!done) {
+                startPatchingInterval();
+            }
+        }, 500);
+
+        // Дополнительная попытка патчинга
+        setTimeout(() => {
+            tryPatchAllCalculators();
+        }, 2000);
+
+        // Устанавливаем слушатели на поля
+        setTimeout(() => {
+            setupCalculatorFieldListeners();
+        }, 1000);
+
+        // Устанавливаем наблюдение за очисткой полей
+        setupFieldWatchers();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+})();
+    </script>
+    <?php
+}, 25);
