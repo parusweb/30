@@ -1009,7 +1009,7 @@ const partitionCalc = document.createElement('div');
 partitionCalc.id = 'calc-partition-slat';
 
 let partCalcHTML = '<br><h4>Калькулятор стоимости реечных перегородок</h4>';
-partCalcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:15px;">';
+partCalcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:15px;align-items: flex-end;">';
 
 // Выбор ширины (30-150 мм, шаг 10)
 partCalcHTML += `<label>Ширина (мм) : 
@@ -1023,20 +1023,15 @@ partCalcHTML += `</select></label>`;
 // Фиксированная длина
 partCalcHTML += `<div style="display:flex;flex-direction:column;">
     <span style="font-size:0.9em;color:#666;">Длина: </span>
-    <strong style="font-size:1.1em;">3 метра</strong>
+    <strong style="font-size:1.1em;">3м</strong>
 </div>`;
 
 // Фиксированная толщина
 partCalcHTML += `<div style="display:flex;flex-direction:column;">
     <span style="font-size:0.9em;color:#666;">Толщина: </span>
-    <strong style="font-size:1.1em;">40 мм</strong>
+    <strong style="font-size:1.1em;">40мм</strong>
 </div>`;
 
-// Количество
-partCalcHTML += `<div style="display:flex;flex-direction:column;">
-    <span style="font-size:0.9em;color:#666;">Количество:</span>
-    <strong id="part_quantity_display" style="font-size:1.1em;">1</strong>
-</div>`;
 
 partCalcHTML += '</div>';
 partCalcHTML += '<div id="calc_part_result" style="margin-top:10px;font-size:1.3em;"></div>';
@@ -1145,12 +1140,9 @@ window.updatePartitionSlatCalc = function() {
     // Вывод результата
     let resultHTML = `<strong>Площадь одной рейки:</strong> ${areaPerItem.toFixed(3)} м²<br>`;
     resultHTML += `<strong>Общая площадь (×${quantity}):</strong> ${totalArea.toFixed(2)} м²<br>`;
-    resultHTML += `<strong>Цена за 1 шт:</strong> ${pricePerItem.toFixed(2)} ₽<br>`;
-    resultHTML += `<strong>Стоимость материала:</strong> ${materialPrice.toFixed(2)} ₽`;
+    resultHTML += `<strong>Цена за 1 шт:</strong> ${(pricePerItem).toFixed(2)} ₽<br>`;
+    resultHTML += `<strong>Стоимость материала:</strong> ${priceWithMultiplier.toFixed(2)} ₽`;
     
-    if (priceMultiplier !== 1) {
-        resultHTML += `<br><strong>С множителем (×${priceMultiplier}):</strong> ${priceWithMultiplier.toFixed(2)} ₽`;
-    }
     
     if (paintingCost > 0 && paintingServiceData) {
         resultHTML += `<br><strong>Покраска:</strong> ${paintingServiceData.name_with_color} — ${paintingCost.toFixed(2)} ₽`;
@@ -1238,24 +1230,38 @@ if (priceMultiplier !== 1) {
 }
 calcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;">';
 
-// Поле ширины
-if (calcSettings && calcSettings.width_min > 0 && calcSettings.width_max > 0) {
+// Проверка на штакетник (категория 273)
+<?php $is_shtaketnik = has_term(273, 'product_cat', $product_id); ?>
+
+// === Поле ширины ===
+<?php if ($is_shtaketnik): ?>
+    // Фиксированная ширина для штакетника
     calcHTML += `<label>Ширина (мм): 
         <select id="mult_width" style="background:#fff;margin-left:10px;">
-            <option value="">Выберите...</option>`;
-    for (let w = calcSettings.width_min; w <= calcSettings.width_max; w += calcSettings.width_step) {
-        calcHTML += `<option value="${w}">${w}</option>`;
+            <option value="">Выберите...</option>
+            <option value="95">95</option>
+            <option value="120">120</option>
+            <option value="145">145</option>
+        </select></label>`;
+<?php else: ?>
+    // Динамическая ширина для остальных товаров
+    if (calcSettings && calcSettings.width_min > 0 && calcSettings.width_max > 0) {
+        calcHTML += `<label>Ширина (мм): 
+            <select id="mult_width" style="background:#fff;margin-left:10px;">
+                <option value="">Выберите...</option>`;
+        for (let w = calcSettings.width_min; w <= calcSettings.width_max; w += calcSettings.width_step) {
+            calcHTML += `<option value="${w}">${w}</option>`;
+        }
+        calcHTML += `</select></label>`;
+    } else {
+        calcHTML += `<label>Ширина (мм): 
+            <input type="number" id="mult_width" min="1" step="100" placeholder="1000" style="width:100px; margin-left:10px;background:#fff;">
+        </label>`;
     }
-    calcHTML += `</select></label>`;
-} else {
-    calcHTML += `<label>Ширина (мм): 
-        <input type="number" id="mult_width" min="1" step="100" placeholder="1000" style="width:100px; margin-left:10px;background:#fff;">
-    </label>`;
-}
+<?php endif; ?>
 
-// Поле длины
+// === Поле длины ===
 if (calcSettings && calcSettings.length_min > 0 && calcSettings.length_max > 0) {
-    
     calcHTML += `<label>Длина (м): 
         <select id="mult_length" min="0.01" step="0.01" style="margin-left:10px;background:#fff;">
             <option value="">Выберите...</option>`;
@@ -1616,6 +1622,9 @@ if (quantityInput) {
         }
     });
 }
+
+
+
 
 // Синхронизация количества из основного поля в калькулятор
 if (quantityInput) {
