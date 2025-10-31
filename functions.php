@@ -1020,19 +1020,19 @@ for (let w = 30; w <= 150; w += 10) {
 }
 partCalcHTML += `</select></label>`;
 
-// Фиксированная длина (только для отображения)
+// Фиксированная длина
 partCalcHTML += `<div style="display:flex;flex-direction:column;">
     <span style="font-size:0.9em;color:#666;">Длина: </span>
     <strong style="font-size:1.1em;">3 метра</strong>
 </div>`;
 
-// Фиксированная толщина (только для отображения)  
+// Фиксированная толщина
 partCalcHTML += `<div style="display:flex;flex-direction:column;">
     <span style="font-size:0.9em;color:#666;">Толщина: </span>
     <strong style="font-size:1.1em;">40 мм</strong>
 </div>`;
 
-// Отображение количества
+// Количество
 partCalcHTML += `<div style="display:flex;flex-direction:column;">
     <span style="font-size:0.9em;color:#666;">Количество:</span>
     <strong id="part_quantity_display" style="font-size:1.1em;">1</strong>
@@ -1042,14 +1042,28 @@ partCalcHTML += '</div>';
 partCalcHTML += '<div id="calc_part_result" style="margin-top:10px;font-size:1.3em;"></div>';
 
 partitionCalc.innerHTML = partCalcHTML;
-resultBlock.appendChild(partitionCalc);
 
-// Добавляем блок услуг покраски после калькулятора
-if (paintingBlock) {
-    partitionCalc.appendChild(paintingBlock);
+// ВАЖНО: Проверяем существование resultBlock
+if (typeof resultBlock !== 'undefined' && resultBlock) {
+    resultBlock.appendChild(partitionCalc);
+    console.log('✓ Калькулятор реечных перегородок добавлен в resultBlock');
+} else {
+    console.warn('⚠️ resultBlock не найден, добавляем после формы');
+    const form = document.querySelector('form.cart');
+    if (form) {
+        form.insertAdjacentElement('afterend', partitionCalc);
+    } else {
+        console.error('❌ Форма корзины не найдена');
+    }
 }
 
-// Элементы калькулятора
+// Добавляем блок услуг покраски
+if (typeof paintingBlock !== 'undefined' && paintingBlock) {
+    partitionCalc.appendChild(paintingBlock);
+    console.log('✓ Блок покраски добавлен');
+}
+
+// === СНАЧАЛА ОБЪЯВЛЯЕМ ВСЕ ПЕРЕМЕННЫЕ ===
 const partWidthEl = document.getElementById('part_width');
 const partQuantityDisplay = document.getElementById('part_quantity_display');
 const partResult = document.getElementById('calc_part_result');
@@ -1059,48 +1073,50 @@ const basePricePart = <?php echo floatval($product->get_price()); ?>;
 const FIXED_LENGTH = 3; // метры
 const FIXED_THICKNESS = 40; // мм
 
-// Функция расчёта для реечных перегородок
-function updatePartitionSlatCalc() {
-    const widthValue = parseFloat(partWidthEl && partWidthEl.value);
+// === ЗАТЕМ ОПРЕДЕЛЯЕМ ФУНКЦИЮ ===
+window.updatePartitionSlatCalc = function() {
+    if (!partWidthEl) {
+        console.error('❌ partWidthEl не найден');
+        return;
+    }
+    
+    const widthValue = parseFloat(partWidthEl.value);
     const quantity = (quantityInput && !isNaN(parseInt(quantityInput.value))) ? 
                      parseInt(quantityInput.value) : 1;
 
-    // Обновляем отображение количества
+    // Обновляем количество
     if (partQuantityDisplay) {
         partQuantityDisplay.textContent = quantity;
     }
 
     if (!widthValue || widthValue <= 0) {
-        partResult.innerHTML = '<span style="color:#999;">Выберите ширину рейки</span>';
-        removeHiddenFields('custom_part_');
+        if (partResult) {
+            partResult.innerHTML = '<span style="color:#999;">Выберите ширину рейки</span>';
+        }
+        if (typeof removeHiddenFields === 'function') {
+            removeHiddenFields('custom_part_');
+        }
         return;
     }
 
-    // Площадь одной рейки = (ширина в метрах) × длина
+    // Расчёты
     const areaPerItem = (widthValue / 1000) * FIXED_LENGTH;
-    
-    // Общая площадь = площадь одной × количество
     const totalArea = areaPerItem * quantity;
-    
-    // Базовая цена материала = площадь × цена за м²
     const materialPrice = totalArea * basePricePart;
-    
-    // Применяем множитель
     const priceWithMultiplier = materialPrice * priceMultiplier;
 
-    // Получаем стоимость покраски
+    // Покраска
     let paintingCost = 0;
     let paintingServiceData = null;
     const selectedService = document.querySelector('select[id="painting_service_select"]');
     
-    if (selectedService && selectedService.value) {
+    if (selectedService && selectedService.value && typeof paintingServices !== 'undefined') {
         const serviceKey = selectedService.value;
         const service = paintingServices[serviceKey];
         
         if (service) {
             paintingCost = totalArea * parseFloat(service.price);
             
-            // Получаем выбранный цвет
             const selectedColorRadio = document.querySelector('input[name="pm_selected_color"]:checked');
             let colorFileName = '';
             let colorImageUrl = '';
@@ -1124,10 +1140,12 @@ function updatePartitionSlatCalc() {
     }
 
     const grandTotal = priceWithMultiplier + paintingCost;
+    const pricePerItem = priceWithMultiplier / quantity;
 
-    // Формируем вывод
+    // Вывод результата
     let resultHTML = `<strong>Площадь одной рейки:</strong> ${areaPerItem.toFixed(3)} м²<br>`;
     resultHTML += `<strong>Общая площадь (×${quantity}):</strong> ${totalArea.toFixed(2)} м²<br>`;
+    resultHTML += `<strong>Цена за 1 шт:</strong> ${pricePerItem.toFixed(2)} ₽<br>`;
     resultHTML += `<strong>Стоимость материала:</strong> ${materialPrice.toFixed(2)} ₽`;
     
     if (priceMultiplier !== 1) {
@@ -1140,72 +1158,70 @@ function updatePartitionSlatCalc() {
     
     resultHTML += `<br><strong style="font-size:1.2em;color:#2c5282;">Итого:</strong> <strong style="font-size:1.2em;color:#2c5282;">${grandTotal.toFixed(2)} ₽</strong>`;
     
-    partResult.innerHTML = resultHTML;
-
-    // Сохраняем данные в скрытые поля
-    removeHiddenFields('custom_part_');
-    createHiddenField('custom_part_width', widthValue);
-    createHiddenField('custom_part_length', FIXED_LENGTH);
-    createHiddenField('custom_part_thickness', FIXED_THICKNESS);
-    createHiddenField('custom_part_quantity', quantity);
-    createHiddenField('custom_part_area_per_item', areaPerItem.toFixed(4));
-    createHiddenField('custom_part_total_area', totalArea.toFixed(4));
-    createHiddenField('custom_part_multiplier', priceMultiplier);
-    createHiddenField('custom_part_price', priceWithMultiplier.toFixed(2));
-    createHiddenField('custom_part_grand_total', grandTotal.toFixed(2));
-    
-    if (paintingServiceData) {
-        createHiddenField('custom_part_painting_service', JSON.stringify(paintingServiceData));
+    if (partResult) {
+        partResult.innerHTML = resultHTML;
     }
 
-    console.log('Partition slat calc updated:', {
+    // Сохраняем в скрытые поля
+    if (typeof removeHiddenFields === 'function' && typeof createHiddenField === 'function') {
+        removeHiddenFields('custom_part_');
+        createHiddenField('custom_part_width', widthValue);
+        createHiddenField('custom_part_length', FIXED_LENGTH);
+        createHiddenField('custom_part_thickness', FIXED_THICKNESS);
+        createHiddenField('custom_part_quantity', quantity);
+        createHiddenField('custom_part_area_per_item', areaPerItem.toFixed(4));
+        createHiddenField('custom_part_total_area', totalArea.toFixed(4));
+        createHiddenField('custom_part_multiplier', priceMultiplier);
+        createHiddenField('custom_part_price', priceWithMultiplier.toFixed(2));
+        createHiddenField('custom_part_grand_total', grandTotal.toFixed(2));
+        
+        if (paintingServiceData) {
+            createHiddenField('custom_part_painting_service', JSON.stringify(paintingServiceData));
+        }
+    }
+
+    console.log('✓ Partition slat calc updated:', {
         width: widthValue,
-        length: FIXED_LENGTH,
-        thickness: FIXED_THICKNESS,
         quantity: quantity,
-        area_per_item: areaPerItem,
-        total_area: totalArea,
-        price: priceWithMultiplier,
-        painting: paintingCost,
+        price_per_item: pricePerItem,
         grand_total: grandTotal
     });
-}
+};
 
-// Обработчики событий
+// === ОБРАБОТЧИКИ СОБЫТИЙ ===
 if (partWidthEl) {
     partWidthEl.addEventListener('change', function() {
         if (this.value) {
-            updatePartitionSlatCalc();
+            window.updatePartitionSlatCalc();
         }
     });
 }
 
 if (quantityInput) {
-    quantityInput.addEventListener('change', function() {
+    const partQuantityHandler = function() {
         if (partWidthEl && partWidthEl.value) {
-            updatePartitionSlatCalc();
+            window.updatePartitionSlatCalc();
         }
-    });
+    };
+    
+    quantityInput.addEventListener('change', partQuantityHandler);
+    quantityInput.addEventListener('input', partQuantityHandler);
 }
 
-// Обработчик для изменения услуги покраски
+// Обработчик покраски
 document.addEventListener('change', function(e) {
     if (e.target.id === 'painting_service_select' && partWidthEl && partWidthEl.value) {
-        updatePartitionSlatCalc();
+        window.updatePartitionSlatCalc();
     }
-});
-
-// Обработчик для выбора цвета покраски
-document.addEventListener('change', function(e) {
+    
     if (e.target.name === 'pm_selected_color' && partWidthEl && partWidthEl.value) {
-        console.log('Paint color changed for partition slat, recalculating...');
-        updatePartitionSlatCalc();
+        console.log('Paint color changed, recalculating...');
+        window.updatePartitionSlatCalc();
     }
 });
 
 console.log('✓ Partition slat calculator (271) fully initialized');
 <?php endif; ?>
-
 
 
 
@@ -2270,128 +2286,14 @@ console.log('✓ Running meter calculator fully initialized');
 
 
 
-<?php if($is_partition_slat): ?>
-// Калькулятор для реечных перегородок (категория 271)
-const partitionSlatCalc = document.createElement('div');
-partitionSlatCalc.id = 'calc-partition-slat';
-
-let psCalcHTML = '<br><h4>Калькулятор стоимости</h4>';
-psCalcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;">';
-
-// Фиксированные параметры
-psCalcHTML += '<div style="background:#f0f8ff; padding:10px; border-radius:5px; margin-bottom:10px; flex:0 0 100%;">';
-psCalcHTML += '<div><strong>Длина:</strong> 3м</div>';
-psCalcHTML += '<div><strong>Толщина:</strong> 40мм</div>';
-psCalcHTML += '</div>';
-
-// Поле ширины
-if (calcSettings && calcSettings.width_min > 0 && calcSettings.width_max > 0) {
-    psCalcHTML += `<label>Ширина (мм): 
-        <select id="ps_width" style="background:#fff;margin-left:10px;">
-            <option value="">Выберите...</option>`;
-    for (let w = calcSettings.width_min; w <= calcSettings.width_max; w += calcSettings.width_step) {
-        psCalcHTML += `<option value="${w}">${w}</option>`;
-    }
-    psCalcHTML += `</select></label>`;
-} else {
-    psCalcHTML += `<label>Ширина (мм): 
-        <input type="number" id="ps_width" min="1" step="10" placeholder="100" style="width:100px; margin-left:10px;background:#fff">
-    </label>`;
-}
-
-psCalcHTML += `<label style="display:none">Количество (шт): <span id="ps_quantity_display" style="margin-left:10px; font-weight:600;">1</span></label>`;
-psCalcHTML += '</div><div id="calc_ps_result" style="margin-top:10px; font-size:1.3em"></div>';
-partitionSlatCalc.innerHTML = psCalcHTML;
-if (resultBlock) {
-    resultBlock.appendChild(partitionSlatCalc);
-} else {
-    console.error('resultBlock not found for partition slat calc');
-}
-
-// Добавляем блок услуг покраски
-if (paintingBlock) {
-    partitionSlatCalc.appendChild(paintingBlock);
-}
-
-const psWidthEl = document.getElementById('ps_width');
-const psQuantityDisplay = document.getElementById('ps_quantity_display');
-const psResult = document.getElementById('calc_ps_result');
-const basePricePS = <?php echo floatval($product->get_price()); ?>;
-
-// Фиксированные значения
-const FIXED_LENGTH = 3.0; // метры
-const FIXED_THICKNESS = 0.04; // метры (40мм)
-
-function updatePartitionSlatCalc() {
-    const widthValue = parseFloat(psWidthEl.value);
-
-    const quantity = (quantityInput && !isNaN(parseInt(quantityInput.value))) ? parseInt(quantityInput.value) : 1;
-    psQuantityDisplay.textContent = quantity;
-
-    if (!widthValue || widthValue <= 0) {
-        psResult.innerHTML = '';
-        removeHiddenFields('custom_ps_');
-        updatePaintingServiceCost(0);
-        return;
-    }
-
-    const width_m = widthValue / 1000;
-    
-    // Площадь одной рейки = ширина × длина
-    const areaPerItem = width_m * FIXED_LENGTH;
-    const totalArea = areaPerItem * quantity;
-    
-    // Цена с учетом множителя
-    const pricePerItem = areaPerItem * basePricePS * priceMultiplier;
-    const materialPrice = pricePerItem * quantity;
-    
-    const paintingCost = updatePaintingServiceCost(totalArea);
-    const grandTotal = materialPrice + paintingCost;
-
-    let html = `Размеры рейки: <b>${widthValue} мм × 3000 мм × 40 мм</b><br>`;
-    html += `Площадь 1 шт: <b>${areaPerItem.toFixed(3)} м²</b><br>`;
-    html += `Общая площадь: <b>${totalArea.toFixed(3)} м²</b> (${quantity} шт)<br>`;
-    html += `Цена за 1 шт: <b>${pricePerItem.toFixed(2)} ₽</b><br>`;
-    html += `Стоимость материала: <b>${materialPrice.toFixed(2)} ₽</b><br>`;
-    
-    if (paintingCost > 0) {
-        html += `Стоимость покраски: <b>${paintingCost.toFixed(2)} ₽</b><br>`;
-        html += `<strong>Итого с покраской: <b>${grandTotal.toFixed(2)} ₽</b></strong>`;
-    } else {
-        html += `<strong>Итого: <b>${materialPrice.toFixed(2)} ₽</b></strong>`;
-    }
-
-    psResult.innerHTML = html;
-
-    createHiddenField('custom_ps_width', widthValue);
-    createHiddenField('custom_ps_length', FIXED_LENGTH);
-    createHiddenField('custom_ps_thickness', FIXED_THICKNESS * 1000); // сохраняем в мм
-    createHiddenField('custom_ps_quantity', quantity);
-    createHiddenField('custom_ps_area_per_item', areaPerItem.toFixed(3));
-    createHiddenField('custom_ps_total_area', totalArea.toFixed(3));
-    createHiddenField('custom_ps_multiplier', priceMultiplier);
-    createHiddenField('custom_ps_price', materialPrice.toFixed(2));
-    createHiddenField('custom_ps_grand_total', grandTotal.toFixed(2));
-}
-
-psWidthEl.addEventListener('change', updatePartitionSlatCalc);
-
-// Синхронизация количества
-if (quantityInput) {
-    quantityInput.addEventListener('input', function() {
-        if (!isAutoUpdate && psWidthEl.value) {
-            updatePartitionSlatCalc();
-        }
-    });
-}
-<?php endif; ?>
 
 
 
 
 
 
-        <?php if($is_square_meter && !$is_running_meter): ?>
+
+<?php if($is_square_meter && !$is_running_meter && !$is_multiplier): ?>
         // Калькулятор для категорий за квадратные метры - столярные изделия
         const sqMeterCalc = document.createElement('div');
         sqMeterCalc.id = 'calc-square-meter';
@@ -6515,12 +6417,12 @@ add_action('wp_footer', function() {
     // ============================================================================
     
     let originalBasePrice = null;
-    const MAX_PATCH_ATTEMPTS = 10;
+    const MAX_PATCH_ATTEMPTS = 20;
     let patchAttempts = 0;
-    const DEBUG = false; // Включить для отладки
+    const DEBUG = true; // ВКЛЮЧАЕМ для отладки
 
     function log(...args) {
-        if (DEBUG) console.log(...args);
+        if (DEBUG) console.log('[PRICE UPDATE]', ...args);
     }
 
     // ============================================================================
@@ -6538,7 +6440,7 @@ add_action('wp_footer', function() {
         if (!priceEl) priceEl = document.querySelector('.price .amount');
         
         if (!priceEl) {
-            if (DEBUG) console.warn('⚠️ Элемент цены не найден');
+            log('⚠️ Элемент цены не найден');
             return false;
         }
         
@@ -6556,7 +6458,7 @@ add_action('wp_footer', function() {
             }
         }
         
-        log('✓ Цена обновлена:', formattedPrice, '₽');
+        log('✓ Цена обновлена:', formattedPrice, '₽', isCalculated ? '(рассчитанная)' : '(базовая)');
         return true;
     };
 
@@ -6564,30 +6466,45 @@ add_action('wp_footer', function() {
      * Извлекает цену за единицу из HTML результата калькулятора
      */
     function extractPricePerItem(resultElement) {
-        if (!resultElement) return null;
+        if (!resultElement) {
+            log('⚠️ resultElement не передан');
+            return null;
+        }
         
         const html = resultElement.innerHTML;
+        log('Анализируем HTML результата:', html.substring(0, 200));
         
         const patterns = [
+            // Основной паттерн для всех калькуляторов
             /Цена за 1 шт:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
-            /за 1 шт:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
-            /Итого:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
-            /Итого с покраской:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
             /Цена за 1 шт:\s*<strong>([\d,\s.]+)\s*₽<\/strong>/i,
-            /Итого:\s*<strong>([\d,\s.]+)\s*₽<\/strong>/i,
+            
+            // Для реечных перегородок
+            /Цена за 1 шт:<\/strong>\s*([\d,\s.]+)\s*₽/i,
+            
+            // Запасные варианты
+            /за 1 шт:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
+            /Стоимость материала:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
+            
+            // Итого (только если нет других)
+            /Итого:\s*<b>([\d,\s.]+)\s*₽<\/b>/i,
+            /Итого:\s*<strong[^>]*>([\d,\s.]+)\s*₽<\/strong>/i,
         ];
         
-        for (let pattern of patterns) {
+        for (let i = 0; i < patterns.length; i++) {
+            const pattern = patterns[i];
             const match = html.match(pattern);
             if (match) {
-                const price = parseFloat(match[1].replace(/[\s,]/g, ''));
+                const priceStr = match[1].replace(/[\s,]/g, '');
+                const price = parseFloat(priceStr);
                 if (!isNaN(price) && price > 0) {
-                    log('✓ Извлечена цена:', price);
+                    log('✓ Цена извлечена (паттерн', i + 1, '):', price, '₽');
                     return price;
                 }
             }
         }
         
+        log('⚠️ Цена не найдена ни по одному паттерну');
         return null;
     }
 
@@ -6602,7 +6519,9 @@ add_action('wp_footer', function() {
         const priceMatch = priceText.match(/(\d+(?:[,\s]\d+)?)/);
         
         if (priceMatch) {
-            return parseFloat(priceMatch[1].replace(/[\s,]/g, ''));
+            const price = parseFloat(priceMatch[1].replace(/[\s,]/g, ''));
+            log('Базовая цена со страницы:', price);
+            return price;
         }
         
         return null;
@@ -6614,7 +6533,7 @@ add_action('wp_footer', function() {
     function resetToBasePrice() {
         if (originalBasePrice && originalBasePrice > 0) {
             window.updateDisplayedProductPrice(originalBasePrice, false);
-            log('🔄 Цена сброшена к базовой');
+            log('🔄 Цена сброшена к базовой:', originalBasePrice);
         }
     }
 
@@ -6626,40 +6545,54 @@ add_action('wp_footer', function() {
      * Безопасный патчинг функции
      */
     function safePatch(funcName, resultElementId) {
-        if (typeof window[funcName] !== 'function' || window[funcName]._patched) {
+        if (typeof window[funcName] !== 'function') {
+            log(`⏳ ${funcName} еще не определена`);
             return false;
+        }
+        
+        if (window[funcName]._patched) {
+            log(`✓ ${funcName} уже пропатчена`);
+            return true;
         }
 
         try {
             const original = window[funcName];
             
             window[funcName] = function() {
+                log(`🔧 Вызов ${funcName}`);
+                
                 try {
                     original.apply(this, arguments);
                 } catch (e) {
-                    console.error(`Ошибка в ${funcName}:`, e);
+                    console.error(`Ошибка в оригинальной ${funcName}:`, e);
                 }
                 
+                // Даем время на обновление DOM
                 setTimeout(() => {
                     try {
                         const resultEl = document.getElementById(resultElementId);
                         if (resultEl && resultEl.innerHTML.trim()) {
+                            log(`Результат ${funcName} обновлен, извлекаем цену из:`, resultElementId);
                             const price = extractPricePerItem(resultEl);
                             if (price && price > 0) {
                                 window.updateDisplayedProductPrice(price, true);
+                            } else {
+                                log(`⚠️ Цена не извлечена из ${resultElementId}`);
                             }
+                        } else {
+                            log(`⚠️ Элемент ${resultElementId} пуст или не найден`);
                         }
                     } catch (e) {
                         console.error(`Ошибка обновления цены для ${funcName}:`, e);
                     }
-                }, 50);
+                }, 100);
             };
             
             window[funcName]._patched = true;
-            log(`✓ ${funcName} пропатчен`);
+            log(`✅ ${funcName} успешно пропатчена`);
             return true;
         } catch (e) {
-            console.error(`Ошибка патчинга ${funcName}:`, e);
+            console.error(`❌ Ошибка патчинга ${funcName}:`, e);
             return false;
         }
     }
@@ -6669,53 +6602,35 @@ add_action('wp_footer', function() {
      */
     function tryPatchAllCalculators() {
         patchAttempts++;
+        log(`=== Попытка патчинга #${patchAttempts} ===`);
         
         const calculators = [
             ['updateMultiplierCalc', 'calc_mult_result'],
             ['updateRunningMeterCalc', 'calc_rm_result'],
             ['updateSquareMeterCalc', 'calc_sq_result'],
-            ['updatePartitionSlatCalc', 'calc_part_result']
+            ['updatePartitionSlatCalc', 'calc_part_result'],
+            ['updateAreaCalc', 'calc_area_result']
         ];
         
         let patchedCount = 0;
+        let existingCount = 0;
         
         calculators.forEach(([funcName, resultId]) => {
-            if (safePatch(funcName, resultId)) {
-                patchedCount++;
+            if (typeof window[funcName] === 'function') {
+                existingCount++;
+                if (safePatch(funcName, resultId)) {
+                    patchedCount++;
+                }
             }
         });
         
-        // Специальная обработка для калькулятора площади
-        if (typeof updateAreaCalc === 'function' && !updateAreaCalc._patched) {
-            try {
-                const original = updateAreaCalc;
-                window.updateAreaCalc = function() {
-                    original.apply(this, arguments);
-                    setTimeout(() => {
-                        const form = document.querySelector('form.cart');
-                        if (form) {
-                            const field = form.querySelector('input[name="custom_area_grand_total"]');
-                            if (field && field.value) {
-                                const total = parseFloat(field.value);
-                                if (total > 0) {
-                                    window.updateDisplayedProductPrice(total, true);
-                                }
-                            }
-                        }
-                    }, 50);
-                };
-                updateAreaCalc._patched = true;
-                patchedCount++;
-            } catch (e) {
-                console.error('Ошибка патчинга updateAreaCalc:', e);
-            }
-        }
+        log(`📊 Найдено функций: ${existingCount}, Пропатчено: ${patchedCount}`);
         
-        if (patchedCount > 0) {
-            log('✓ Пропатчено:', patchedCount);
-        }
+        // Продолжаем попытки, если еще есть что патчить
+        const shouldContinue = (existingCount > 0 && patchedCount < existingCount) || 
+                              (existingCount === 0 && patchAttempts < MAX_PATCH_ATTEMPTS);
         
-        return patchedCount > 0 || patchAttempts >= MAX_PATCH_ATTEMPTS;
+        return !shouldContinue;
     }
 
     // ============================================================================
@@ -6738,30 +6653,78 @@ add_action('wp_footer', function() {
             'sq_length': 'updateSquareMeterCalc',
             'calc_area_input': 'updateAreaCalc',
             'part_width': 'updatePartitionSlatCalc',
-            'ps_width': 'updatePartitionSlatCalc',
         };
 
+        // Универсальный обработчик
+        function handleFieldChange(fieldId, calcFunction) {
+            const field = document.getElementById(fieldId);
+            if (!field) return false;
+
+            ['change', 'input'].forEach(eventType => {
+                field.addEventListener(eventType, function() {
+                    log(`📝 Изменение поля ${fieldId}`);
+                    if (typeof window[calcFunction] === 'function') {
+                        setTimeout(() => window[calcFunction](), 10);
+                    }
+                });
+            });
+
+            return true;
+        }
+
+        // Установка слушателей с задержкой
+        setTimeout(() => {
+            log('🎧 Установка слушателей на поля калькуляторов...');
+            let listenersCount = 0;
+            Object.entries(calculatorFields).forEach(([fieldId, calcFunction]) => {
+                if (handleFieldChange(fieldId, calcFunction)) {
+                    listenersCount++;
+                }
+            });
+            log(`✓ Установлено слушателей: ${listenersCount}`);
+        }, 1500);
+
+        // Делегированный слушатель для динамических полей
+        document.addEventListener('change', function(e) {
+            if (e.target.id && calculatorFields[e.target.id]) {
+                const func = calculatorFields[e.target.id];
+                log(`🔔 Делегированное событие для ${e.target.id}`);
+                if (typeof window[func] === 'function') {
+                    setTimeout(() => window[func](), 10);
+                }
+            }
+        });
+        
         // Отслеживание покраски
         setTimeout(() => {
             const paintingSelect = document.getElementById('painting_service_select');
             if (paintingSelect) {
+                log('🎨 Добавлен слушатель на выбор покраски');
                 paintingSelect.addEventListener('change', function() {
+                    log('🎨 Изменена услуга покраски');
                     setTimeout(() => {
-                        const activeCalc = ['calc_mult_result', 'calc_rm_result', 'calc_sq_result', 
-                                          'calc_area_result', 'calc_part_result']
-                            .find(id => document.getElementById(id)?.innerHTML.trim());
+                        // Ищем активный калькулятор
+                        const activeCalcs = [
+                            'calc_mult_result', 'calc_rm_result', 'calc_sq_result', 
+                            'calc_area_result', 'calc_part_result'
+                        ];
                         
-                        if (activeCalc) {
-                            const funcMap = {
-                                'calc_mult_result': 'updateMultiplierCalc',
-                                'calc_rm_result': 'updateRunningMeterCalc',
-                                'calc_sq_result': 'updateSquareMeterCalc',
-                                'calc_area_result': 'updateAreaCalc',
-                                'calc_part_result': 'updatePartitionSlatCalc'
-                            };
-                            const func = funcMap[activeCalc];
-                            if (typeof window[func] === 'function') {
-                                window[func]();
+                        for (let calcId of activeCalcs) {
+                            const el = document.getElementById(calcId);
+                            if (el && el.innerHTML.trim()) {
+                                log(`✓ Найден активный калькулятор: ${calcId}`);
+                                const funcMap = {
+                                    'calc_mult_result': 'updateMultiplierCalc',
+                                    'calc_rm_result': 'updateRunningMeterCalc',
+                                    'calc_sq_result': 'updateSquareMeterCalc',
+                                    'calc_area_result': 'updateAreaCalc',
+                                    'calc_part_result': 'updatePartitionSlatCalc'
+                                };
+                                const func = funcMap[calcId];
+                                if (typeof window[func] === 'function') {
+                                    window[func]();
+                                }
+                                break;
                             }
                         }
                     }, 50);
@@ -6775,42 +6738,10 @@ add_action('wp_footer', function() {
                 e.target.name === 'faska_type' || 
                 e.target.name === 'shape_type') {
                 
+                log(`🎨 Изменен дополнительный параметр: ${e.target.name}`);
                 setTimeout(() => {
                     if (typeof updateMultiplierCalc === 'function') updateMultiplierCalc();
                 }, 50);
-            }
-        });
-
-        // Универсальный обработчик
-        function handleFieldChange(fieldId, calcFunction) {
-            const field = document.getElementById(fieldId);
-            if (!field) return false;
-
-            ['change', 'input'].forEach(eventType => {
-                field.addEventListener(eventType, function() {
-                    if (typeof window[calcFunction] === 'function') {
-                        setTimeout(() => window[calcFunction](), 10);
-                    }
-                });
-            });
-
-            return true;
-        }
-
-        // Установка слушателей
-        setTimeout(() => {
-            Object.entries(calculatorFields).forEach(([fieldId, calcFunction]) => {
-                handleFieldChange(fieldId, calcFunction);
-            });
-        }, 1000);
-
-        // Делегированный слушатель
-        document.addEventListener('change', function(e) {
-            if (e.target.id && calculatorFields[e.target.id]) {
-                const func = calculatorFields[e.target.id];
-                if (typeof window[func] === 'function') {
-                    setTimeout(() => window[func](), 10);
-                }
             }
         });
     }
@@ -6821,7 +6752,7 @@ add_action('wp_footer', function() {
     function setupFieldWatchers() {
         const calcInputIds = [
             'mult_width', 'mult_length', 'rm_width', 'rm_length',
-            'sq_width', 'sq_length', 'calc_area_input', 'part_width', 'ps_width'
+            'sq_width', 'sq_length', 'calc_area_input', 'part_width'
         ];
         
         document.addEventListener('change', function(e) {
@@ -6842,24 +6773,36 @@ add_action('wp_footer', function() {
     // ============================================================================
 
     function init() {
-        log('=== ИНИЦИАЛИЗАЦИЯ АВТООБНОВЛЕНИЯ ЦЕНЫ ===');
+        log('=== 🚀 ИНИЦИАЛИЗАЦИЯ АВТООБНОВЛЕНИЯ ЦЕНЫ ===');
         
         // Сохраняем базовую цену
         setTimeout(() => {
             originalBasePrice = getOriginalPriceFromPage();
             if (originalBasePrice) {
-                log('✓ Базовая цена:', originalBasePrice, '₽');
+                log('💰 Базовая цена сохранена:', originalBasePrice, '₽');
+            } else {
+                log('⚠️ Не удалось получить базовую цену');
             }
         }, 100);
 
-        // Патчим калькуляторы (несколько попыток)
-        setTimeout(() => tryPatchAllCalculators(), 800);
-        setTimeout(() => tryPatchAllCalculators(), 2000);
-        setTimeout(() => tryPatchAllCalculators(), 3500);
+        // Множественные попытки патчинга
+        const patchIntervals = [500, 1000, 1500, 2000, 2500, 3000, 4000, 5000];
+        
+        patchIntervals.forEach((delay, index) => {
+            setTimeout(() => {
+                if (!tryPatchAllCalculators()) {
+                    log(`⏭️ Продолжаем попытки патчинга...`);
+                } else {
+                    log(`✅ Патчинг завершен на попытке #${index + 1}`);
+                }
+            }, delay);
+        });
 
         // Устанавливаем слушатели
-        setTimeout(() => setupCalculatorFieldListeners(), 1500);
+        setTimeout(() => setupCalculatorFieldListeners(), 2000);
         setupFieldWatchers();
+        
+        log('✓ Инициализация завершена');
     }
 
     if (document.readyState === 'loading') {
