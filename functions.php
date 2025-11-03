@@ -262,24 +262,98 @@ add_filter('woocommerce_get_price_html', function($price, $product) {
     $is_lumber_category = has_term($lumber_categories, 'product_cat', $product_id);
     $is_square_meter = is_square_meter_category($product_id);
     $is_running_meter = is_running_meter_category($product_id);
+    $is_partition_slat = is_partition_slat_category($product_id);
+    $is_shtaketnik = has_term(273, 'product_cat', $product_id);
+    $is_multiplier = is_in_multiplier_categories($product_id);
 
     if ($is_leaf_category) {
         $price = str_replace('упак.', 'лист', $price);
     }
     
-    
     $price_multiplier = get_price_multiplier($product->get_id());
+    
+    // Для реечных перегородок (категория 271)
+    if ($is_partition_slat) {
+        $base_price_per_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+        if ($base_price_per_m2) {
+            // Минимальная ширина 30мм, длина 3м, толщина 40мм
+            $min_width = 30; // мм
+            $min_length = 3; // м
+            $min_area = ($min_width / 1000) * $min_length;
+            $min_price = $base_price_per_m2 * $min_area * $price_multiplier;
+            
+            if (is_product()) {
+                if ($should_hide_base_price) {
+                    return '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт.</span>';
+                }
+                
+                return wc_price($base_price_per_m2) . '<span style="font-size:1.3em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+                       '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт.</span>';
+            } else {
+                if ($should_hide_base_price) {
+                    return '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+                }
+                
+                return wc_price($base_price_per_m2) . '<span style="font-size:0.9em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+                       '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+            }
+        }
+    }
+    
+    // Для штакетника (категория 273) и других множителей
+    if ($is_multiplier && !$is_running_meter && !$is_partition_slat && !$is_square_meter) {
+        $base_price_per_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+        if ($base_price_per_m2) {
+            // Получаем минимальные размеры
+            $min_width = floatval(get_post_meta($product_id, '_calc_width_min', true));
+            $min_length = floatval(get_post_meta($product_id, '_calc_length_min', true));
+            
+            // Для штакетника фиксированная минимальная ширина 95мм
+            if ($is_shtaketnik) {
+                $min_width = 95; // мм
+            }
+            
+            // Если не заданы минимальные размеры, используем defaults
+            if (!$min_width || $min_width <= 0) $min_width = 100;
+            if (!$min_length || $min_length <= 0) $min_length = 0.01;
+            
+            $min_length = round($min_length, 2);
+            $min_area = ($min_width / 1000) * $min_length;
+            $min_price = $base_price_per_m2 * $min_area * $price_multiplier;
+            
+            // ДОБАВЛЯЕМ ЦЕНУ ФОРМЫ ВЕРХА ДЛЯ ШТАКЕТНИКА (самая дешевая - прямой спил)
+            if ($is_shtaketnik) {
+                $flat_shape_price = floatval(get_post_meta($product_id, '_shape_price_flat', true)) ?: 0;
+                $min_price += $flat_shape_price;
+            }
+            
+            if (is_product()) {
+                if ($should_hide_base_price) {
+                    return '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . number_format($min_area, 3) . ' м²)</span>';
+                }
+                
+                return wc_price($base_price_per_m2) . '<span style="font-size:1.3em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+                       '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . number_format($min_area, 3) . ' м²)</span>';
+            } else {
+                if ($should_hide_base_price) {
+                    return '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+                }
+                
+                return wc_price($base_price_per_m2) . '<span style="font-size:0.9em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+                       '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+            }
+        }
+    }
+    
     // Для столярных изделий за пог.м
     if ($is_running_meter) {
         $base_price_per_m = floatval($product->get_regular_price() ?: $product->get_price());
         if ($base_price_per_m) {
-            // Получаем минимальные размеры
             $min_length = floatval(get_post_meta($product_id, '_calc_length_min', true)) ?: 1;
             $min_length = round($min_length, 2);
             $min_price = $base_price_per_m * $min_length * $price_multiplier;
             
             if (is_product()) {
-                // Если нужно скрыть базовую цену - показываем только цену за шт.
                 if ($should_hide_base_price) {
                     return '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . $min_length . ' м)</span>';
                 }
@@ -287,7 +361,6 @@ add_filter('woocommerce_get_price_html', function($price, $product) {
                 return wc_price($base_price_per_m) . '<span style="font-size:1.3em; font-weight:600">&nbsp;за пог. м</span><br>' .
                        '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . $min_length . ' м)</span>';
             } else {
-                // Если нужно скрыть базовую цену - показываем только цену за шт.
                 if ($should_hide_base_price) {
                     return '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
                 }
@@ -298,18 +371,16 @@ add_filter('woocommerce_get_price_html', function($price, $product) {
         }
     }
 
-// Для столярных изделий за кв.м
+    // Для столярных изделий за кв.м (фальшбалки и др.)
     if ($is_square_meter) {
         $base_price_per_m2 = floatval($product->get_regular_price() ?: $product->get_price());
         if ($base_price_per_m2) {
-            // Получаем минимальные размеры
             $is_falshbalka = has_term(266, 'product_cat', $product_id);
+            
             if ($is_falshbalka) {
-                // Для фальшбалок (Г-образная форма): 70x70мм по умолчанию, 2 плоскости
                 $min_width = floatval(get_post_meta($product_id, '_calc_width_min', true)) ?: 70;
                 $min_length = floatval(get_post_meta($product_id, '_calc_length_min', true)) ?: 1;
                 $min_length = round($min_length, 2);
-                // Площадь Г-образной формы: 2 плоскости по 70мм каждая
                 $min_area = 2 * ($min_width / 1000) * $min_length;
             } else {
                 $min_width = floatval(get_post_meta($product_id, '_calc_width_min', true)) ?: 100;
@@ -317,10 +388,10 @@ add_filter('woocommerce_get_price_html', function($price, $product) {
                 $min_length = round($min_length, 2);
                 $min_area = ($min_width / 1000) * $min_length;
             }
+            
             $min_price = $base_price_per_m2 * $min_area * $price_multiplier;
             
             if (is_product()) {
-                // Если нужно скрыть базовую цену - показываем только цену за шт.
                 if ($should_hide_base_price) {
                     return '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . number_format($min_area, 2) . ' м²)</span>';
                 }
@@ -328,7 +399,6 @@ add_filter('woocommerce_get_price_html', function($price, $product) {
                 return wc_price($base_price_per_m2) . '<span style="font-size:1.3em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
                        '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . number_format($min_area, 2) . ' м²)</span>';
             } else {
-                // Если нужно скрыть базовую цену - показываем только цену за шт.
                 if ($should_hide_base_price) {
                     return '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
                 }
@@ -632,6 +702,20 @@ if (productCatIds.includes(273)) {
     let selectedShape = 'round';
 
     const shapeBlock = document.createElement('div');
+    
+    // Автоматически выбираем самый дешевый вариант (прямой спил)
+document.addEventListener('DOMContentLoaded', function() {
+    const flatRadio = document.querySelector('input[name="shape_type"][value="flat"]');
+    if (flatRadio && !document.querySelector('input[name="shape_type"]:checked')) {
+        flatRadio.checked = true;
+        flatRadio.closest('label').classList.add('active-shape');
+        
+        // Сохраняем выбор
+        createHiddenField('selected_shape_type', 'flat');
+        createHiddenField('selected_shape_price', shapePrices['flat']);
+    }
+});
+    
     shapeBlock.id = 'shtaketnik-shape-icons';
     shapeBlock.style.marginTop = '15px';
     shapeBlock.innerHTML = `
@@ -1145,7 +1229,7 @@ window.updatePartitionSlatCalc = function() {
     
     
     if (paintingCost > 0 && paintingServiceData) {
-        resultHTML += `<br><strong>Покраска:</strong> ${paintingServiceData.name_with_color} — ${paintingCost.toFixed(2)} ₽`;
+        resultHTML += `<br><strong>Стоимость покраски: </strong>${paintingCost.toFixed(2)} ₽`;
     }
     
     resultHTML += `<br><strong style="font-size:1.2em;color:#2c5282;">Итого:</strong> <strong style="font-size:1.2em;color:#2c5282;">${grandTotal.toFixed(2)} ₽</strong>`;
@@ -6824,3 +6908,252 @@ add_action('wp_footer', function() {
     </script>
     <?php
 }, 30); // ВАЖНО: приоритет 30 (после основного калькулятора)
+
+
+
+
+
+// === ОПИСАНИЯ ДЛЯ СХЕМ ПОКРАСКИ ===
+
+// Регистрируем тип записи для описаний схем покраски
+add_action('init', 'register_paint_scheme_descriptions_post_type');
+function register_paint_scheme_descriptions_post_type() {
+    register_post_type('paint_scheme_desc', array(
+        'labels' => array(
+            'name' => 'Описания схем покраски',
+            'singular_name' => 'Описание схемы',
+            'add_new' => 'Добавить описание',
+            'add_new_item' => 'Добавить новое описание',
+            'edit_item' => 'Редактировать описание',
+            'new_item' => 'Новое описание',
+            'view_item' => 'Посмотреть описание',
+            'search_items' => 'Искать описания',
+            'not_found' => 'Описания не найдены',
+            'not_found_in_trash' => 'В корзине описаний не найдено',
+        ),
+        'public' => false,
+        'show_ui' => true,
+        'show_in_menu' => 'theme-general-settings',
+        'menu_icon' => 'dashicons-art',
+        'supports' => array('title', 'editor'),
+        'capability_type' => 'post',
+        'has_archive' => false,
+        'hierarchical' => false,
+    ));
+}
+
+// Добавляем ACF поля для связи описания с схемой покраски
+add_action('acf/init', 'add_paint_scheme_description_fields');
+function add_paint_scheme_description_fields() {
+    if (!function_exists('acf_add_local_field_group')) return;
+    
+    acf_add_local_field_group(array(
+        'key' => 'group_paint_scheme_description',
+        'title' => 'Настройки описания схемы покраски',
+        'fields' => array(
+            array(
+                'key' => 'field_scheme_slug',
+                'label' => 'Slug схемы покраски',
+                'name' => 'scheme_slug',
+                'type' => 'text',
+                'instructions' => 'Введите slug схемы покраски (например: naturalnoe-maslo, voskovka и т.д.). Это должно совпадать со значением из ACF Repeater в услугах покраски.',
+                'required' => 1,
+            ),
+            array(
+                'key' => 'field_scheme_short_description',
+                'label' => 'Краткое описание',
+                'name' => 'short_description',
+                'type' => 'textarea',
+                'instructions' => 'Краткое описание схемы (1-2 предложения)',
+                'rows' => 3,
+            ),
+            array(
+                'key' => 'field_scheme_features',
+                'label' => 'Особенности покрытия',
+                'name' => 'features',
+                'type' => 'wysiwyg',
+                'instructions' => 'Подробное описание особенностей, преимуществ и характеристик',
+                'tabs' => 'all',
+                'toolbar' => 'basic',
+                'media_upload' => 1,
+            ),
+            array(
+                'key' => 'field_scheme_application',
+                'label' => 'Рекомендации по применению',
+                'name' => 'application',
+                'type' => 'wysiwyg',
+                'instructions' => 'Где и как лучше использовать эту схему покраски',
+                'tabs' => 'all',
+                'toolbar' => 'basic',
+            ),
+        ),
+        'location' => array(
+            array(
+                array(
+                    'param' => 'post_type',
+                    'operator' => '==',
+                    'value' => 'paint_scheme_desc',
+                ),
+            ),
+        ),
+    ));
+}
+
+// Функция для получения описания схемы по slug
+function get_paint_scheme_description($scheme_slug) {
+    $args = array(
+        'post_type' => 'paint_scheme_desc',
+        'posts_per_page' => 1,
+        'meta_query' => array(
+            array(
+                'key' => 'scheme_slug',
+                'value' => $scheme_slug,
+                'compare' => '='
+            )
+        )
+    );
+    
+    $query = new WP_Query($args);
+    
+    if ($query->have_posts()) {
+        $query->the_post();
+        $description = array(
+            'title' => get_the_title(),
+            'content' => get_the_content(),
+            'short_description' => get_field('short_description'),
+            'features' => get_field('features'),
+            'application' => get_field('application'),
+        );
+        wp_reset_postdata();
+        return $description;
+    }
+    
+    return null;
+}
+
+// Добавляем описание в блок выбора схемы покраски
+add_action('wp_footer', 'add_paint_scheme_descriptions_to_page');
+function add_paint_scheme_descriptions_to_page() {
+    if (!is_product()) return;
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Ищем контейнер с радиокнопками схем
+        const schemeRadios = document.querySelectorAll('input[name="pm_selected_scheme"]');
+        
+        if (schemeRadios.length === 0) return;
+        
+        // Создаем контейнер для описания
+        const descriptionContainer = document.createElement('div');
+        descriptionContainer.id = 'paint-scheme-description';
+        descriptionContainer.style.cssText = 'margin-top: 15px; padding: 15px; background: #f9f9f9; border-radius: 8px; border-left: 4px solid #8bc34a; display: none;';
+        
+        // Вставляем после блока с радиокнопками
+        const schemesBlock = document.getElementById('paint-schemes-root');
+        if (schemesBlock) {
+            schemesBlock.appendChild(descriptionContainer);
+        }
+        
+        // Функция загрузки и отображения описания
+        function loadSchemeDescription(schemeSlug) {
+            if (!schemeSlug) {
+                descriptionContainer.style.display = 'none';
+                return;
+            }
+            
+            // AJAX запрос для получения описания
+            fetch('<?php echo admin_url("admin-ajax.php"); ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=get_paint_scheme_desc&scheme_slug=' + encodeURIComponent(schemeSlug)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.data) {
+                    const desc = data.data;
+                    let html = '<h4 style="margin-top: 0; color: #333;">' + desc.title + '</h4>';
+                    
+                    if (desc.short_description) {
+                        html += '<p style="font-size: 14px; color: #666;">' + desc.short_description + '</p>';
+                    }
+                    
+                    if (desc.features) {
+                        html += '<div style="margin-top: 10px;">' + desc.features + '</div>';
+                    }
+                    
+                    if (desc.application) {
+                        html += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd;">' + desc.application + '</div>';
+                    }
+                    
+                    descriptionContainer.innerHTML = html;
+                    descriptionContainer.style.display = 'block';
+                } else {
+                    descriptionContainer.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки описания:', error);
+                descriptionContainer.style.display = 'none';
+            });
+        }
+        
+        // Слушаем изменение выбора схемы
+        schemeRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.checked) {
+                    const schemeSlug = this.getAttribute('data-slug');
+                    loadSchemeDescription(schemeSlug);
+                }
+            });
+            
+            // Загружаем описание для предвыбранной схемы
+            if (radio.checked) {
+                const schemeSlug = radio.getAttribute('data-slug');
+                loadSchemeDescription(schemeSlug);
+            }
+        });
+    });
+    </script>
+    <?php
+}
+
+// AJAX обработчик для получения описания схемы
+add_action('wp_ajax_get_paint_scheme_desc', 'ajax_get_paint_scheme_desc');
+add_action('wp_ajax_nopriv_get_paint_scheme_desc', 'ajax_get_paint_scheme_desc');
+function ajax_get_paint_scheme_desc() {
+    if (!isset($_POST['scheme_slug'])) {
+        wp_send_json_error('Не указан slug схемы');
+    }
+    
+    $scheme_slug = sanitize_text_field($_POST['scheme_slug']);
+    $description = get_paint_scheme_description($scheme_slug);
+    
+    if ($description) {
+        wp_send_json_success($description);
+    } else {
+        wp_send_json_error('Описание не найдено');
+    }
+}
+
+// Добавляем колонку slug в список описаний
+add_filter('manage_paint_scheme_desc_posts_columns', 'add_scheme_slug_column');
+function add_scheme_slug_column($columns) {
+    $new_columns = array();
+    foreach ($columns as $key => $value) {
+        $new_columns[$key] = $value;
+        if ($key === 'title') {
+            $new_columns['scheme_slug'] = 'Slug схемы';
+        }
+    }
+    return $new_columns;
+}
+
+add_action('manage_paint_scheme_desc_posts_custom_column', 'show_scheme_slug_column', 10, 2);
+function show_scheme_slug_column($column, $post_id) {
+    if ($column === 'scheme_slug') {
+        $slug = get_field('scheme_slug', $post_id);
+        echo $slug ? '<code>' . esc_html($slug) . '</code>' : '—';
+    }
+}
