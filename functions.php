@@ -6924,3 +6924,91 @@ add_filter('gettext', function($translated, $text, $domain) {
 
 require_once get_stylesheet_directory() . '/inc/paint-description.php';
 
+// ============================================================================
+// ВЫВОД ЦЕНЫ ПО БЕЗНАЛУ - исправленная версия
+// ============================================================================
+
+add_action('wp_footer', 'add_non_cash_price_js', 999);
+function add_non_cash_price_js() {
+    if (!is_product()) return;
+    
+    global $product;
+    if (!$product) return;
+    
+    ?>
+    <script>
+    jQuery(document).ready(function($) {
+        // Ищем блок с ценой
+        var priceElement = $('p.price').first();
+        
+        if (priceElement.length === 0) {
+            return;
+        }
+        
+        // Клонируем элемент цены
+        var priceClone = priceElement.clone();
+        
+        // Находим все элементы с ценами
+        var amounts = priceClone.find('.woocommerce-Price-amount, .amount, bdi');
+        
+        // Обрабатываем каждый элемент с ценой
+        amounts.each(function() {
+            var $this = $(this);
+            var originalText = $this.text();
+            
+            // Извлекаем число (убираем все кроме цифр, пробелов, запятых)
+            var priceStr = originalText.replace(/[^\d\s,]/g, '');
+            priceStr = priceStr.replace(/\s/g, '').replace(',', '.');
+            
+            var price = parseFloat(priceStr);
+            
+            if (!isNaN(price) && price > 0) {
+
+                // Увеличиваем на 10%
+                var newPrice = price * 1.1;
+                
+                // Форматируем новую цену
+                var newPriceFormatted = Math.round(newPrice)
+                    .toString()
+                    .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+                
+                // Заменяем старую цену на новую в тексте элемента
+                var newText = originalText.replace(/[\d\s,]+/, newPriceFormatted);
+                
+                $this.text(newText);
+                
+            }
+        });
+        
+        var newPriceHTML = priceClone.html();
+        var html = '<div class="non-cash-price-block" style="margin: 15px 0; padding: 15px; background: #e5e5e5; border-radius: 4px; width:100%">';
+        html += '<p style="color: #333; font-size: 15px; display: block; margin-bottom: 10px;">Цена по безналичному расчету (+10%):</p>';
+        html += '<div class="non-cash-price-content" style="font-size: 15px; color: #0073aa; font-weight: 600; line-height: 1.3;">';
+        html += newPriceHTML;
+        html += '</div>';
+        html += '</div>';
+        
+        priceElement.after(html);
+
+        $('<style>')
+            .text(`
+                .non-cash-price-block .woocommerce-Price-amount {
+                    color: #0073aa !important;
+                }
+                @media (max-width: 768px) {
+                    .non-cash-price-block {
+                        padding: 12px;
+                    }
+                    .non-cash-price-block strong {
+                        font-size: 14px;
+                    }
+                    .non-cash-price-content {
+                        font-size: 16px !important;
+                    }
+                }
+            `)
+            .appendTo('head');
+    });
+    </script>
+    <?php
+}
